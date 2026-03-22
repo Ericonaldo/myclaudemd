@@ -1,53 +1,169 @@
-### 任务生命周期
+# What we are building
 
-1. **领取任务**：原子操作，从 `data/dev-tasks.json` 获取任务  
-
-2. **创建工作区**：
-   - `git worktree add -b task/xxx ../voice-notes-worktrees/task-xxx`
-   - 创建隔离的 `data/` 目录（实验数据库）
-   - Symlink 共享文件：`dev-tasks.json`, `api-key.json`（⚠️ `PROGRESS.md` 禁止 symlink）
-   - Symlink `node_modules/` 加速启动
-   - 分配专属端口  
-
-3. **实现功能**：Claude Code 在隔离环境中工作  
-
-4. **提交代码**：`git commit` 在任务分支  
-
-5. **Merge + 测试**：
-   - `git fetch origin && git merge origin/main`
-   - `npm test`  
-
-6. **自动合并到 main**：
-   - `git fetch origin main`
-   - `git rebase origin/main`，如果失败，按照下面的“冲突处理”来 resolve rebase conflict
-   - 如果成功，则：
-     - `git merge main task-xxx`
-     - `git push origin main`
-     - 继续执行下一步
-   - 如果这一步有任何失败，则退回到步骤 5  
-
-7. **标记完成**：更新 `dev-tasks.json`（必须在清理之前，防止进程被杀时任务状态丢失）  
-
-8. **清理**：
-   - `git worktree remove` + 删除本地分支
-   - 删除远程 task 分支
-   - 重启 dev server  
-
-9. **经验沉淀**：在 `PROGRESS.md` 记录经验教训（可选，如果被杀也不影响任务状态）
-
-## 多实例并行开发（Git Worktree）
-
-### 架构说明
-
-支持多个 Claude Code 实例并行工作，每个实例在独立的 `git worktree` 中执行任务。
+Placeholder here.
 
 ---
 
-### 并行开发工作流
+# Public Server
+
+You can access the public server using:
+
+```bash
+ssh newserver
+```
+
+This server is publicly accessible and will host the page.
+
+---
+
+# Your Job
+
+Continue working until **all features are confirmed working and all tests pass**.
+
+Use your **bash and Chrome MCP** to verify that all functions work.
+
+Keep working until **all functions are confirmed working**.
+
+---
+
+---
+
+# Deploy SOP (部署标准流程)
+
+**关键原则：在 worktree 中修改代码后，必须在 main repo 中 pull 最新代码再构建，不要在 worktree 中构建。**
+
+完整部署流程：
+
+```bash
+# 1. 在 worktree 中提交并推送到 main
+git add <files>
+git commit -m "feat/fix: ..."
+git fetch origin main && git rebase origin/main
+git push origin <worktree-branch>:main
+
+# 2. 在 main repo 中同步并构建（关键！）
+cd /home/mhliu/podcast-transcript-forum
+git pull origin main
+cd client && rm -rf dist && npx vite build
+
+# 3. 上传构建产物到服务器
+rsync -avz --delete /home/mhliu/podcast-transcript-forum/client/dist/ newserver:/home/prod/podcast-forum/client/dist/
+
+# 4. 同步服务端代码（如果改了 server/）
+ssh newserver "cd /home/prod/podcast-forum && git pull origin main"
+
+# 5. 重启服务器
+ssh newserver "kill $(ssh newserver 'ss -tlnp | grep 4010 | grep -oP "pid=\d+" | grep -oP "\d+"') 2>/dev/null"
+ssh newserver "cd /home/prod/podcast-forum && nohup node server/src/index.js > server.log 2>&1 & echo PID=\$!"
+
+# 6. 验证
+sleep 2 && ssh newserver "curl -s -o /dev/null -w '%{http_code}' http://localhost:4010/"
+```
+
+**常见踩坑**：
+- 服务器 Node v20 无法运行 `vite build`（需 Node ≥ 22），所以必须在本地构建
+- `express.static` 对 index.html 已配置 `no-cache`，部署后用户刷新即可获取最新版本
+- 不要混淆 worktree 的构建产物和 main repo 的构建产物
+
+---
+
+# Submit Code
+
+All code should be committed on a **task branch**:
+
+```bash
+git commit
+```
+
+---
+
+# Merge + Test
+
+```bash
+git fetch origin && git merge origin/main
+npm test
+```
+
+---
+
+# Auto Commit and Merge to Main
+
+After each feature is completed and all tests pass, you must **commit and then merge to `main`**.
+
+Before each commit, update related documentation if new features are added.
+
+Workflow:
+
+1. Sync main branch
+
+```bash
+git fetch origin main
+```
+
+2. Rebase your task branch
+
+```bash
+git rebase origin/main
+```
+
+3. If rebase fails, follow the **Conflict Resolution** section below.
+
+4. If rebase succeeds:
+
+```bash
+git merge main task-xxx
+git push origin main
+```
+
+5. Continue with the next task.
+
+6. If **any step fails**, return to **Step 5** in the workflow.
+
+---
+
+# Mark Task Completion
+
+Update `dev-tasks.json` **before cleanup** to prevent losing task status if the process is killed.
+
+---
+
+# Cleanup
+
+After task completion:
+
+- Remove the worktree:
+
+```bash
+git worktree remove
+```
+
+- Delete the local branch
+- Delete the remote task branch
+- Restart the development server
+
+---
+
+# Knowledge Capture (Optional)
+
+Record lessons learned in `PROGRESS.md`.
+
+This is optional because task status is already recorded in `dev-tasks.json`, so even if the process is killed, the task state is preserved.
+
+---
+
+# Multi-Instance Parallel Development (Git Worktree)
+
+## Architecture Overview
+
+Multiple Claude Code instances can run **in parallel**, with each instance working in an **independent `git worktree`**.
+
+---
+
+## Parallel Development Workflow
 
 ```
 ┌──────────────────────────────────────────────┐
-│                并行开发工作流                │
+│              Parallel Development Workflow   │
 └──────────────────────────────────────────────┘
 
    ┌────────────────────┐   ┌────────────────────┐   ┌────────────────────┐
@@ -60,61 +176,127 @@
         │ data/  │               │ data/  │               │ data/  │
         └────────┘               └────────┘               └────────┘
 
-                           （隔离的实验数据）
+                     (isolated experimental data)
 ```
 
 ---
 
-### 共享文件（symlink）
+# ⚠️ Symlink Is Forbidden
 
-- `dev-tasks.json`（任务队列）
-- `dev-task.lock`（文件锁）
-- `api-key.json`（API 密钥）
+Do **not create symbolic links** for:
 
----
+```
+PROGRESS.md
+```
 
-### ⚠️ 禁止 symlink
+Always edit the main repository file directly using:
 
-- `PROGRESS.md`（直接用 `git -C` 编辑主仓库文件）
-
-### 冲突处理
-
-#### Rebase 失败时的处理流程
-
-1. 如果是 `"unstaged changes"` 错误，先 `commit` 或 `stash` 当前改动  
-2. 如果有 merge conflicts：
-   - 查看冲突文件：`git status`
-   - 读取冲突文件内容，理解双方改动意图
-   - 手动解决冲突（保留正确的代码）
-   - `git add <resolved-files>`
-   - `git rebase --continue`
-3. 重复直到 rebase 完成  
+```bash
+git -C
+```
 
 ---
 
-#### 测试失败时的处理流程
+# Conflict Resolution
 
-1. 运行测试：`npm test`
-2. 如果失败，分析错误信息
-3. 修复代码中的 bug
-4. 重新运行测试，直到全部通过
-5. 提交修复：`git commit -m "fix: ..."`
+## Handling Rebase Failures
 
----
+1. If the error is `"unstaged changes"`:
 
-**不要放弃**：遇到 rebase 或测试失败时，必须解决问题后才能继续，不能直接标记任务失败。
+Commit or stash the current modifications first.
 
----
+```bash
+git commit
+```
 
-## 经验教训沉淀
+or
 
-每次遇到问题或完成重要改动后，要在 [`PROGRESS.md`](./PROGRESS.md) 中记录：
-
-- 遇到了什么问题
-- 如何解决的
-- 以后如何避免
-- **必须附上 git commit ID**
+```bash
+git stash
+```
 
 ---
 
-**同样的问题不要犯两次！**
+2. If there are **merge conflicts**:
+
+Check conflicting files:
+
+```bash
+git status
+```
+
+Open the conflicting files and understand the changes from both sides.
+
+Manually resolve the conflicts.
+
+Stage the resolved files:
+
+```bash
+git add <resolved-files>
+```
+
+Continue the rebase:
+
+```bash
+git rebase --continue
+```
+
+Repeat until the rebase completes.
+
+---
+
+# Handling Test Failures
+
+1. Run tests:
+
+```bash
+npm test
+```
+
+2. If tests fail:
+
+- Analyze the error messages
+- Fix the bugs in the code
+
+3. Run tests again until **all tests pass**.
+
+4. Commit the fix:
+
+```bash
+git commit -m "fix: ..."
+```
+
+---
+
+# Never Give Up
+
+If a **rebase or test fails**, you **must resolve the issue before continuing**.
+
+Do **not mark the task as failed**.
+
+---
+
+# Knowledge Recording
+
+Whenever you encounter a problem or complete an important change, record it in:
+
+```
+PROGRESS.md
+```
+
+Include:
+
+- What problem occurred
+- How it was solved
+- How to avoid it in the future
+- **The corresponding Git commit ID**
+
+---
+
+# Important Rule
+
+**Do not make the same mistake twice.**
+
+And remember:
+
+> **After every new feature, update the README and documentation.**
